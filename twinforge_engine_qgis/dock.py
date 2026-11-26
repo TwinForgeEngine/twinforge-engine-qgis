@@ -21,7 +21,7 @@ from .i18n import tr
 PRIMARY = ("QPushButton{background:#2BB59A;color:#04201A;border:0;border-radius:6px;padding:7px 12px;font-weight:600}"
            "QPushButton:disabled{background:#7FBFB1}")
 SECONDARY = "QPushButton{background:transparent;border:1px solid #6E8F88;border-radius:6px;padding:6px 10px}"
-SOON = "color:#9A7B1E"
+SOON = "color:#6B7C78"
 HEAD = "font-weight:600;margin-top:6px"
 LOG = "TwinForge Engine"
 FEATURE_LIMIT = 5000   # server cap of the signed features endpoint
@@ -61,7 +61,8 @@ class TwinForgeDock(QDockWidget):
         f3 = QFormLayout(); f3.addRow(tr("extrude"), self.extrude); v.addLayout(f3)
         self.publish_btn = QPushButton(tr("publish")); self.publish_btn.setStyleSheet(PRIMARY)
         self.progress = QProgressBar(); self.progress.setVisible(False)
-        v.addWidget(self.publish_btn); v.addWidget(self.progress)
+        self.gpkg_btn = QPushButton(tr("gpkg_btn")); self.gpkg_btn.setStyleSheet(SECONDARY)
+        v.addWidget(self.publish_btn); v.addWidget(self.gpkg_btn); v.addWidget(self.progress)
 
         # 4) result
         self.url = QLineEdit(); self.url.setReadOnly(True); self.url.setPlaceholderText(tr("url_ph"))
@@ -92,6 +93,7 @@ class TwinForgeDock(QDockWidget):
         self.connect_btn.clicked.connect(self.on_connect)
         self.forget_btn.clicked.connect(self.on_forget)
         self.publish_btn.clicked.connect(lambda: self.on_publish())
+        self.gpkg_btn.clicked.connect(lambda: self.on_publish_gpkg())
         self.copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(self.url.text()))
         self.open_btn.clicked.connect(self.on_open)
         self.map_btn.clicked.connect(self.on_open_map)
@@ -238,6 +240,87 @@ class TwinForgeDock(QDockWidget):
             stats = lyr.dataProvider().bandStatistics(1)
             render = {"rescale": f"{stats.minimumValue:g},{stats.maximumValue:g}", "colormap_name": "viridis"}
         return self.client.publish_raster(pid, name, lyr.name(), cog, render)
+
+    # -------------------------------------------------------------- GeoPackage file, all layers, chunked upload
+    def gpkg_plan(self, path: str, taken=()) -> list[dict]:
+        """Layers with geometry in the file, each with its own QGIS style (the one stored in the GeoPackage, if any)."""
+        from qgis.core import QgsProviderRegistry
+        plan, used = [], set(taken)
+        try:
+            subs = QgsProviderRegistry.instance().querySublayers(path)
+            vec = getattr(getattr(Qgis, "LayerType", None), "Vector", 0)
+            names = [d.name() for d in subs if d.type() == vec or int(d.type()) == 0]
+        except Exception:
+            names = []
+        if not names:
+            names = [os.path.splitext(os.path.basename(path))[0]]
+        for n in names[:30]:
+            lyr = QgsVectorLayer(f"{path}|layername={n}", n, "ogr")
+            if not lyr.isValid() or not lyr.isSpatial():
+                continue
+            try:
+                lab = lyr.labeling().settings() if lyr.labelsEnabled() and lyr.labeling() is not None and hasattr(lyr.labeling(), "settings") else None
+            except Exception:
+                lab = None
+            style = export_style(lyr.renderer(), label_field=lab.fieldName if lab else None, label_is_expression=bool(lab and lab.isExpression),
+                                 popup_fields=[(f.name(), lyr.attributeDisplayName(i)) for i, f in enumerate(lyr.fields())][:12],
+                                 title_field=lab.fieldName if lab else None)
+            for x in style.get("reduced", []):
+                QgsMessageLog.logMessage(f"{n}: style: {x}", LOG, Qgis.MessageLevel.Info)
+            name = safe_layer_name(n)
+            base, k = name[:36], 2
+            while name in used:
+                name = f"{base}_{k}"; k += 1
+            used.add(name)
+            plan.append({"source": n, "name": name, "title": n, "style": style})
+        return plan
+
+    def on_publish_gpkg(self, path: str | None = None):
+        if not self.client or self.project.currentData() is None or not self.can_publish():
+            return self.say(tr("need_connect") if self.can_publish() or not self.client else tr("read_only"), Qgis.MessageLevel.Warning)
+        if path is None:
+            from qgis.PyQt.QtWidgets import QFileDialog
+            path, _ = QFileDialog.getOpenFileName(self, tr("gpkg_pick"), "", "GeoPackage (*.gpkg)")
+            if not path:
+                return
+        try:
+            taken = {L.get("name") for L in self.client.layers(self.project.currentData())}
+        except NexusError:
+            taken = set()
+        plan = self.gpkg_plan(path, taken)
+        if not plan:
+            return self.say(tr("gpkg_none"), Qgis.MessageLevel.Warning)
+        pid = self.project.currentData(); client = self.client
+        self.publish_btn.setEnabled(False); self.gpkg_btn.setEnabled(False); self.progress.setVisible(True); self.progress.setRange(0, 100)
+
+        def run(task):
+            uid = client.gpkg_upload(pid, path, progress=lambda f: task.setProgress(90 * f), cancelled=task.isCanceled)
+            return client.gpkg_import(uid, plan, progress=lambda f: task.setProgress(90 + 10 * f))
+
+        def done(exc, res=None):
+            self.publish_btn.setEnabled(True); self.gpkg_btn.setEnabled(True); self.progress.setVisible(False)
+            self.last_error = exc
+            if exc:
+                QgsMessageLog.logMessage(f"GeoPackage publish failed: {getattr(exc, 'code', '')} {getattr(exc, 'message', '') or exc}", LOG, Qgis.MessageLevel.Warning)
+                return self.say(exc.text if isinstance(exc, NexusError) else tr("fail"), Qgis.MessageLevel.Warning)
+            ok = [r for r in res["results"] if r.get("ok")]
+            for r in res["results"]:
+                if not r.get("ok"):
+                    QgsMessageLog.logMessage(f"{r.get('source')}: not published ({r.get('code')}: {r.get('message')})", LOG, Qgis.MessageLevel.Warning)
+                for x in r.get("styleReduced") or []:
+                    QgsMessageLog.logMessage(f"{r.get('source')}: style: {x}", LOG, Qgis.MessageLevel.Info)
+            if ok:
+                self.last_layer_id = ok[-1]["layer"]["id"]; self.last_urls = ok[-1]["stream"]["urls"]
+                self.url.setText(self.last_urls.get("mvt") or self.last_urls.get("xyz") or "")
+            msg = tr("gpkg_done", n=len(ok), m=len(res["results"]), file=os.path.basename(path))
+            if len(ok) < len(res["results"]):
+                msg += "\n" + tr("gpkg_failed", n=len(res["results"]) - len(ok))
+            self.say(msg, Qgis.MessageLevel.Info if ok else Qgis.MessageLevel.Warning)
+            self.refresh_remote()
+
+        task = QgsTask.fromFunction(tr("gpkg_task"), run, on_finished=done)
+        self._gpkg_task = task
+        QgsApplication.taskManager().addTask(task)
 
     def on_publish(self, layers=None):
         if not self.client or self.project.currentData() is None or not self.can_publish():

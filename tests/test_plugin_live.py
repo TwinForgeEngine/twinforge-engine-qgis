@@ -94,7 +94,7 @@ def test_three_languages_complete_and_clean(monkeypatch):
         monkeypatch.setenv("TWINFORGE_LANG", L)
         assert i18n.lang() == L
         for k in i18n.T["en"]:
-            s = i18n.tr(k, name="x", n=1)
+            s = i18n.tr(k, name="x", n=1, m=2, file="a.gpkg")
             assert s and "\u00b7" not in s, (L, k)
         assert i18n.err_text("token_expired") != i18n.ERRORS["en"]["network"]
     monkeypatch.setenv("TWINFORGE_LANG", "de")

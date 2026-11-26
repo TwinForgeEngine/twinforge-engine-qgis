@@ -12,7 +12,7 @@ from typing import Any
 KEY_RE = re.compile(r"^tft_[A-Za-z0-9_-]{40,50}$")
 DEFAULT_BASE = "https://twinforgeengine.online"
 
-VERSION = "0.2.4"
+VERSION = "0.2.5"
 
 
 def _qgis_available() -> bool:
@@ -154,6 +154,55 @@ class NexusClient:
         body, ct = self._multipart({"name": name, "title": title, "style": json.dumps(style, ensure_ascii=False)},
                                    {"file": (f"{name}.geojson", geojson)})
         return self._req("POST", f"/api/v1/gis/projects/{project_id}/layers/vector", body, ct)
+
+    # ---------------------------------------------------------------- GeoPackage (chunked, resumable)
+    def gpkg_upload(self, project_id: str, path: str, progress=None, cancelled=None) -> str:
+        import os
+        size = os.path.getsize(path)
+        up = self._req("POST", f"/api/v1/gis/projects/{project_id}/gpkg-uploads",
+                       json.dumps({"filename": os.path.basename(path), "size": size}).encode(), "application/json")
+        uid, chunk, got = up["id"], int(up.get("chunkSize") or 8 * 1024 * 1024), int(up.get("received") or 0)
+        retries = 0
+        with open(path, "rb") as fh:
+            while got < size:
+                if cancelled and cancelled():
+                    self._req("DELETE", f"/api/v1/gis/gpkg-uploads/{uid}")
+                    raise NexusError(0, "cancelled", "cancelled")
+                fh.seek(got); data = fh.read(chunk)
+                try:
+                    st = self._req("PUT", f"/api/v1/gis/gpkg-uploads/{uid}/chunk?offset={got}", data, "application/octet-stream")
+                    got = int(st["received"]); retries = 0
+                except NexusError as e:
+                    if e.code in ("offset_mismatch", "network") and retries < 5:
+                        retries += 1
+                        got = int(self._req("GET", f"/api/v1/gis/gpkg-uploads/{uid}")["received"])
+                        continue
+                    raise
+                if progress:
+                    progress(got / size)
+        return uid
+
+    def gpkg_layers(self, upload_id: str) -> list[dict[str, Any]]:
+        return self._req("GET", f"/api/v1/gis/gpkg-uploads/{upload_id}/layers")["layers"]
+
+    def gpkg_import(self, upload_id: str, layers: list[dict[str, Any]], progress=None) -> dict[str, Any]:
+        """One layer per request so a large file never runs into proxy time limits; the last request removes the upload."""
+        results = []
+        try:
+            for i, w in enumerate(layers):
+                last = i == len(layers) - 1
+                r = self._req("POST", f"/api/v1/gis/gpkg-uploads/{upload_id}/import",
+                              json.dumps({"layers": [w], "keep": not last}, ensure_ascii=False).encode(), "application/json")
+                results += r.get("results") or []
+                if progress:
+                    progress((i + 1) / len(layers))
+        except NexusError:
+            try:
+                self._req("DELETE", f"/api/v1/gis/gpkg-uploads/{upload_id}")
+            except NexusError:
+                pass
+            raise
+        return {"results": results, "published": sum(1 for r in results if r.get("ok"))}
 
     def publish_raster(self, project_id: str, name: str, title: str, cog_path: str, render: dict[str, Any]) -> dict[str, Any]:
         with open(cog_path, "rb") as fh:

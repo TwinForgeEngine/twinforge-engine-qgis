@@ -4,8 +4,8 @@ qgisMinimumVersion=3.34
 qgisMaximumVersion=4.99
 supportsQt6=True
 description=Publish QGIS layers to TwinForge Engine and add TwinForge Engine layers to QGIS, using a TwinForge Engine access token.
-about=Connect with a tft_ access token from your TwinForge Engine account (Account, API keys) that has gis:read, and gis:publish if you want to publish. Choose a project, tick vector or raster layers and publish them to the TwinForge Engine PostGIS workspace. Classes, colours, legend, labels and pop-up fields travel with each vector layer; rasters are converted to Cloud Optimized GeoTIFF on your computer before upload. Published layers can then be added in TwinForge Map, in a TwinForge Engine scene and in TwinForge Canvas dashboards. Layers that are already in TwinForge Engine can be added back into QGIS. The token is kept in the QGIS authentication database, never in project files. Interface in English, Thai and Japanese. Requires a TwinForge Engine account (https://twinforgeengine.online).
-version=0.2.4
+about=Connect with a tft_ access token from your TwinForge Engine account (Account, API keys) that has gis:read, and gis:publish if you want to publish. Choose a project, tick vector or raster layers and publish them to the TwinForge Engine PostGIS workspace. Classes, colours, legend, labels and pop-up fields travel with each vector layer; rasters are converted to Cloud Optimized GeoTIFF on your computer before upload. A GeoPackage file can be published as it is, with all its layers. Published layers can then be added in TwinForge Map, in a TwinForge Engine scene and in TwinForge Canvas dashboards. Layers that are already in TwinForge Engine can be added back into QGIS. The token is kept in the QGIS authentication database, never in project files. Interface in English, Thai and Japanese. Requires a TwinForge Engine account (https://twinforgeengine.online).
+version=0.2.5
 author=TwinForge Engine
 email=support@twinforgeengine.online
 homepage=https://twinforgeengine.online/qgis-plugin/
@@ -20,6 +20,7 @@ hasProcessingProvider=no
 server=False
 icon=icon.png
 changelog=
+    0.2.5 GeoPackage: publish a GeoPackage file as it is: every layer with its stored QGIS style, uploaded in resumable 8 MB parts. The layer list refreshes after each publish.
     0.2.4 Styles: fixes "The style could not be read" when a layer has an empty field. Every renderer and symbol type is read part by part; rule-based styles with simple rules become categories; what is simplified is listed in the QGIS log (TwinForge Engine tab).
     0.2.3 QGIS 4 (Qt6) support: fixes "QLineEdit has no attribute Password" when opening the panel.
     0.2.2 Source code and issue tracker links.
