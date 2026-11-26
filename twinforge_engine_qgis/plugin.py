@@ -5,7 +5,10 @@ import os
 
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+try:
+    from qgis.PyQt.QtWidgets import QAction
+except ImportError:  # Qt6: QAction lives in QtGui
+    from qgis.PyQt.QtGui import QAction
 
 from .dock import TwinForgeDock
 
@@ -27,7 +30,7 @@ class TwinForgePlugin:
     def _toggle(self, on: bool):
         if self.dock is None:
             self.dock = TwinForgeDock(self.iface)
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
             self.dock.visibilityChanged.connect(lambda v: self.action.setChecked(v))
         self.dock.setVisible(on)
 

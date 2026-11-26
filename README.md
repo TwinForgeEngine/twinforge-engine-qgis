@@ -19,7 +19,7 @@ The token is kept in the QGIS authentication database (protected by the QGIS mas
 It is never written to project files or plain settings. Requests go through the QGIS network manager.
 
 ## Requirements
-QGIS 3.34 or newer. No extra Python packages; GDAL from QGIS is used for COG conversion.
+QGIS 3.34 or newer, including QGIS 4 (Qt6). No extra Python packages; GDAL from QGIS is used for COG conversion.
 
 ## License
 GPL-2.0-or-later. See LICENSE.
@@ -27,3 +27,4 @@ GPL-2.0-or-later. See LICENSE.
 ## Development
 - `./build_zip.sh` builds `dist-plugin/twinforge_engine_qgis-<version>.zip` and its `.sha256` (the same zip is used for Install from ZIP and the QGIS plugin repository).
 - `QT_QPA_PLATFORM=offscreen python3 -m pytest tests` runs the tests with the QGIS Python bindings (QGIS 3.34 or newer). The live tests are skipped unless `TF_LIVE_TOKENS` points to a file with test tokens.
+- `python tools/qt6_check.py twinforge_engine_qgis` (with PyQt6 installed) checks that every Qt import and enum used resolves under Qt6.

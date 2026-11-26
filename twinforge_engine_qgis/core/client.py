@@ -12,7 +12,7 @@ from typing import Any
 KEY_RE = re.compile(r"^tft_[A-Za-z0-9_-]{40,50}$")
 DEFAULT_BASE = "https://twinforgeengine.online"
 
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 
 
 def _qgis_available() -> bool:
@@ -99,9 +99,9 @@ class NexusClient:
         else:
             raise ValueError(method)
         rep = br.reply()
-        status = rep.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        status = rep.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
         raw = bytes(rep.content())
-        if status is not None and 200 <= int(status) < 300 and err == QgsBlockingNetworkRequest.NoError:
+        if status is not None and 200 <= int(status) < 300 and err == QgsBlockingNetworkRequest.ErrorCode.NoError:
             return json.loads(raw) if raw else None
         if status:
             code = bytes(rep.rawHeader(b"X-TF-Error")).decode() or "error"

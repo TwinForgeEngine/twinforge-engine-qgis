@@ -42,7 +42,7 @@ class TwinForgeDock(QDockWidget):
 
         # 1) connect with a tft_ access token
         self.base = QLineEdit(DEFAULT_BASE)
-        self.key = QLineEdit(); self.key.setEchoMode(QLineEdit.Password); self.key.setPlaceholderText(tr("key_ph"))
+        self.key = QLineEdit(); self.key.setEchoMode(QLineEdit.EchoMode.Password); self.key.setPlaceholderText(tr("key_ph"))
         self.connect_btn = QPushButton(tr("connect")); self.connect_btn.setStyleSheet(PRIMARY)
         self.forget_btn = QPushButton(tr("forget")); self.forget_btn.setStyleSheet(SECONDARY)
         self.status = QLabel(tr("not_connected")); self.status.setWordWrap(True)
@@ -85,8 +85,8 @@ class TwinForgeDock(QDockWidget):
         for le in (self.base, self.key, self.scene, self.url):
             le.setMinimumWidth(80)
         for cb in (self.project, self.extrude):
-            cb.setMinimumContentsLength(8); cb.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        sc = QScrollArea(); sc.setWidgetResizable(True); sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); sc.setWidget(w)
+            cb.setMinimumContentsLength(8); cb.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        sc = QScrollArea(); sc.setWidgetResizable(True); sc.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); sc.setWidget(w)
         self.setWidget(sc)
 
         self.connect_btn.clicked.connect(self.on_connect)
@@ -108,7 +108,7 @@ class TwinForgeDock(QDockWidget):
             self.key.setText(saved)
 
     # -------------------------------------------------------------- helpers
-    def say(self, text: str, level=Qgis.Info):
+    def say(self, text: str, level=Qgis.MessageLevel.Info):
         self.status.setText(text)
         self.iface.messageBar().pushMessage("TwinForge Engine", text, level=level, duration=6)
 
@@ -118,12 +118,12 @@ class TwinForgeDock(QDockWidget):
     def refresh_layers(self):
         self.layers.clear()
         for lyr in QgsProject.instance().mapLayers().values():
-            if lyr.type() not in (QgsMapLayer.VectorLayer, QgsMapLayer.RasterLayer):
+            if lyr.type() not in (Qgis.LayerType.Vector, Qgis.LayerType.Raster):
                 continue
             if lyr.customProperty("twinforge/remote"):
                 continue   # layers added from TwinForge Engine are not published back
-            it = QListWidgetItem(lyr.name()); it.setData(Qt.UserRole, lyr.id())
-            it.setFlags(it.flags() | Qt.ItemIsUserCheckable); it.setCheckState(Qt.Unchecked)
+            it = QListWidgetItem(lyr.name()); it.setData(Qt.ItemDataRole.UserRole, lyr.id())
+            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable); it.setCheckState(Qt.CheckState.Unchecked)
             self.layers.addItem(it)
             if isinstance(lyr, QgsVectorLayer):
                 try:
@@ -136,7 +136,7 @@ class TwinForgeDock(QDockWidget):
         items = self.layers.selectedItems()
         if not items:
             return
-        lyr = QgsProject.instance().mapLayer(items[0].data(Qt.UserRole))
+        lyr = QgsProject.instance().mapLayer(items[0].data(Qt.ItemDataRole.UserRole))
         if isinstance(lyr, QgsVectorLayer):
             for fld in lyr.fields():
                 if fld.isNumeric():
@@ -174,7 +174,7 @@ class TwinForgeDock(QDockWidget):
         except NexusError as e:
             self.client = None; self.scopes = []
             self.project.blockSignals(False)
-            self.say(e.text, Qgis.Warning)
+            self.say(e.text, Qgis.MessageLevel.Warning)
 
     def on_forget(self):
         keystore.forget_key(); self.key.clear(); self.client = None; self.scopes = []
@@ -186,8 +186,8 @@ class TwinForgeDock(QDockWidget):
         out = []
         for i in range(self.layers.count()):
             it = self.layers.item(i)
-            if it.checkState() == Qt.Checked:
-                lyr = QgsProject.instance().mapLayer(it.data(Qt.UserRole))
+            if it.checkState() == Qt.CheckState.Checked:
+                lyr = QgsProject.instance().mapLayer(it.data(Qt.ItemDataRole.UserRole))
                 if lyr:
                     out.append(lyr)
         return out
@@ -224,10 +224,10 @@ class TwinForgeDock(QDockWidget):
 
     def on_publish(self, layers=None):
         if not self.client or self.project.currentData() is None or not self.can_publish():
-            return self.say(tr("need_connect") if self.can_publish() or not self.client else tr("read_only"), Qgis.Warning)
+            return self.say(tr("need_connect") if self.can_publish() or not self.client else tr("read_only"), Qgis.MessageLevel.Warning)
         todo = layers or self._checked()
         if not todo:
-            return self.say(tr("need_layer"), Qgis.Warning)
+            return self.say(tr("need_layer"), Qgis.MessageLevel.Warning)
         self.publish_btn.setEnabled(False); self.progress.setVisible(True); self.progress.setRange(0, 100)
 
         def run(task):
@@ -241,15 +241,15 @@ class TwinForgeDock(QDockWidget):
             self.publish_btn.setEnabled(True); self.progress.setVisible(False)
             self.last_error = exc
             if exc:
-                QgsMessageLog.logMessage(f"publish failed: {type(exc).__name__}: {getattr(exc, 'code', '')}", LOG, Qgis.Warning)
-                return self.say(exc.text if isinstance(exc, NexusError) else tr("fail"), Qgis.Warning)
+                QgsMessageLog.logMessage(f"publish failed: {type(exc).__name__}: {getattr(exc, 'code', '')}", LOG, Qgis.MessageLevel.Warning)
+                return self.say(exc.text if isinstance(exc, NexusError) else tr("fail"), Qgis.MessageLevel.Warning)
             last = res[-1]
             self.last_layer_id = last["layer"]["id"]
             self.last_urls = last["stream"]["urls"]
             self.url.setText(self.last_urls.get("mvt") or self.last_urls.get("xyz") or "")
             reduced = [x for r in res for x in (r.get("styleReduced") or [])]
             for x in reduced:
-                QgsMessageLog.logMessage(f"style simplified: {x}", LOG, Qgis.Info)
+                QgsMessageLog.logMessage(f"style simplified: {x}", LOG, Qgis.MessageLevel.Info)
             if self.scene.text().strip():
                 for r in res:
                     self.client.bind(r["layer"]["id"], self.scene.text().strip())
@@ -265,7 +265,7 @@ class TwinForgeDock(QDockWidget):
 
     def on_open(self):
         if not (self.client and self.last_layer_id and self.scene.text().strip()):
-            return self.say(tr("need_scene"), Qgis.Warning)
+            return self.say(tr("need_scene"), Qgis.MessageLevel.Warning)
         r = self.client.bind(self.last_layer_id, self.scene.text().strip())
         webbrowser.open(r["openInEngine"])
 
@@ -281,13 +281,13 @@ class TwinForgeDock(QDockWidget):
         try:
             ls = self.client.layers(pid)
         except NexusError as e:
-            return self.say(e.text, Qgis.Warning)
+            return self.say(e.text, Qgis.MessageLevel.Warning)
         if not ls:
-            it = QListWidgetItem(tr("no_remote")); it.setFlags(Qt.NoItemFlags); self.remote.addItem(it); return
+            it = QListWidgetItem(tr("no_remote")); it.setFlags(Qt.ItemFlag.NoItemFlags); self.remote.addItem(it); return
         for L in ls:
             kind = "Raster" if L.get("kind") == "raster" else (L.get("geometryType") or "Vector")
             it = QListWidgetItem(f"{L.get('title') or L['name']}  ({kind})")
-            it.setData(Qt.UserRole, L)
+            it.setData(Qt.ItemDataRole.UserRole, L)
             self.remote.addItem(it)
 
     def remote_layer(self, info: dict):
@@ -308,15 +308,15 @@ class TwinForgeDock(QDockWidget):
 
     def on_add_remote(self):
         items = self.remote.selectedItems()
-        if not (self.client and items and items[0].data(Qt.UserRole)):
-            return self.say(tr("need_connect"), Qgis.Warning)
-        info = items[0].data(Qt.UserRole)
+        if not (self.client and items and items[0].data(Qt.ItemDataRole.UserRole)):
+            return self.say(tr("need_connect"), Qgis.MessageLevel.Warning)
+        info = items[0].data(Qt.ItemDataRole.UserRole)
         try:
             lyr = self.remote_layer(info)
         except NexusError as e:
-            return self.say(e.text, Qgis.Warning)
+            return self.say(e.text, Qgis.MessageLevel.Warning)
         if not lyr.isValid():
-            return self.say(tr("add_failed"), Qgis.Warning)
+            return self.say(tr("add_failed"), Qgis.MessageLevel.Warning)
         QgsProject.instance().addMapLayer(lyr)
         self.say(tr("added", name=lyr.name()))
 

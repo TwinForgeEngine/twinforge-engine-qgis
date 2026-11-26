@@ -27,6 +27,7 @@ from qgis.core import (QgsApplication, QgsCategorizedSymbolRenderer, QgsClassifi
 
 APP = QgsApplication([], True)
 APP.initQgis()
+from qgis.PyQt.QtCore import Qt  # noqa: E402
 from twinforge_engine_qgis import i18n  # noqa: E402
 from twinforge_engine_qgis.core.client import NexusClient, VERSION  # noqa: E402
 from twinforge_engine_qgis.core.style_export import export_style  # noqa: E402
@@ -175,7 +176,7 @@ def test_live_connect_creates_personal_project_and_publishes(project_layers):
     assert d.project.count() == 1, d.status.text()
     STATE["pid"] = d.project.currentData()
     for i in range(d.layers.count()):
-        d.layers.item(i).setCheckState(2)
+        d.layers.item(i).setCheckState(Qt.CheckState.Checked)
     d.layers.setCurrentRow(0); d._fill_fields()
     idx = d.extrude.findData("height_m"); assert idx > 0; d.extrude.setCurrentIndex(idx)
     d.on_publish(); wait_tasks()
@@ -250,3 +251,31 @@ def test_live_key_not_in_project_or_settings(project_layers, tmp_path):
     from qgis.core import QgsSettings
     assert "tft_" not in str(QgsSettings().value("twinforge_engine/authcfg", ""))
     Path(os.environ.get("TF_LIVE_STATE", "tf_live_state.json")).write_text(json.dumps({"pid": STATE["pid"], "layers": [STATE["b"]["id"], STATE["r"]["id"]]}))
+
+
+def test_dock_and_plugin_open_without_network():
+    """Opening the panel from the toolbar (plugin._toggle) builds the whole dock; this is where QGIS 4 failed in 0.2.2."""
+    from qgis.PyQt.QtWidgets import QLineEdit, QMainWindow, QToolBar
+    from twinforge_engine_qgis.plugin import TwinForgePlugin
+
+    class Iface(FakeIface):
+        def __init__(self): super().__init__(); self.w = QMainWindow(); self.tb = QToolBar()
+        def mainWindow(self): return self.w
+        def addToolBarIcon(self, a): self.tb.addAction(a)
+        def removeToolBarIcon(self, a): self.tb.removeAction(a)
+        def addPluginToWebMenu(self, m, a): pass
+        def removePluginWebMenu(self, m, a): pass
+        def addDockWidget(self, area, d): self.w.addDockWidget(area, d)
+        def removeDockWidget(self, d): self.w.removeDockWidget(d)
+
+    lyr = buildings_layer(); QgsProject.instance().addMapLayer(lyr)
+    try:
+        p = TwinForgePlugin(Iface()); p.initGui(); p.action.setChecked(True)
+        d = p.dock
+        assert d is not None and not d.isHidden() and d.key.echoMode() == QLineEdit.EchoMode.Password
+        d.refresh_layers()
+        names = [d.layers.item(i).text() for i in range(d.layers.count())]
+        assert "QGIS smoke buildings" in names and d.layers.item(names.index("QGIS smoke buildings")).checkState() == Qt.CheckState.Unchecked
+        p.unload(); assert p.dock is None
+    finally:
+        QgsProject.instance().removeMapLayer(lyr.id())

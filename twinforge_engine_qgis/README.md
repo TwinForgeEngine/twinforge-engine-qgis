@@ -19,7 +19,7 @@ The token is kept in the QGIS authentication database (protected by the QGIS mas
 It is never written to project files or plain settings. Requests go through the QGIS network manager.
 
 ## Requirements
-QGIS 3.34 or newer. No extra Python packages; GDAL from QGIS is used for COG conversion.
+QGIS 3.34 or newer, including QGIS 4 (Qt6). No extra Python packages; GDAL from QGIS is used for COG conversion.
 
 ## License
 GPL-2.0-or-later. See LICENSE.
