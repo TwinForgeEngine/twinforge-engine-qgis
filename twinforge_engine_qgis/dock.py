@@ -15,7 +15,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget
 from . import keystore
 from .core.client import DEFAULT_BASE, NexusClient, NexusError, safe_layer_name
 from .core.cog import is_cog, to_cog
-from .core.style_export import export_style
+from .core.style_export import export_style, minimal_style, server_fields
 from .i18n import tr
 
 PRIMARY = ("QPushButton{background:#2BB59A;color:#04201A;border:0;border-radius:6px;padding:7px 12px;font-weight:600}"
@@ -208,12 +208,29 @@ class TwinForgeDock(QDockWidget):
         pid = self.project.currentData()
         name = safe_layer_name(lyr.name())
         if isinstance(lyr, QgsVectorLayer):
-            fields = [f.name().lower() for f in lyr.fields()]
-            label = lyr.labeling().settings().fieldName if lyr.labelsEnabled() and lyr.labeling() and hasattr(lyr.labeling(), "settings") else None
-            style = export_style(lyr.renderer(), label_field=label, extrusion_field=self.extrude.currentData() or None,
-                                 popup_fields=[(f, lyr.attributeDisplayName(i)) for i, f in enumerate(fields)][:12],
-                                 title_field=label)
-            return self.client.publish_vector(pid, name, lyr.name(), self._export_vector(lyr), style)
+            data = self._export_vector(lyr)
+            avail = server_fields(data)
+            label, label_expr = None, False
+            try:
+                if lyr.labelsEnabled() and lyr.labeling() is not None and hasattr(lyr.labeling(), "settings"):
+                    st = lyr.labeling().settings(); label, label_expr = st.fieldName, bool(st.isExpression)
+            except Exception:
+                label = None
+            style = export_style(lyr.renderer(), label_field=label, label_is_expression=label_expr,
+                                 extrusion_field=self.extrude.currentData() or None,
+                                 popup_fields=[(f.name(), lyr.attributeDisplayName(i)) for i, f in enumerate(lyr.fields())][:12],
+                                 title_field=label, available_fields=avail)
+            for x in style.get("reduced", []):
+                QgsMessageLog.logMessage(f"{lyr.name()}: style: {x}", LOG, Qgis.MessageLevel.Info)
+            try:
+                return self.client.publish_vector(pid, name, lyr.name(), data, style)
+            except NexusError as e:
+                if e.code != "style_invalid":
+                    raise
+                QgsMessageLog.logMessage(f"{lyr.name()}: server refused the style ({e.message}); publishing with one colour.",
+                                         LOG, Qgis.MessageLevel.Warning)
+                return self.client.publish_vector(pid, name, lyr.name(), data,
+                                                  minimal_style(style, f"Server refused the style: {e.message}"))
         src = lyr.source()
         cog = src if is_cog(src) else to_cog(src)
         render = {}
@@ -241,15 +258,13 @@ class TwinForgeDock(QDockWidget):
             self.publish_btn.setEnabled(True); self.progress.setVisible(False)
             self.last_error = exc
             if exc:
-                QgsMessageLog.logMessage(f"publish failed: {type(exc).__name__}: {getattr(exc, 'code', '')}", LOG, Qgis.MessageLevel.Warning)
+                QgsMessageLog.logMessage(f"publish failed: {type(exc).__name__}: {getattr(exc, 'code', '')} {getattr(exc, 'message', '') or exc}", LOG, Qgis.MessageLevel.Warning)
                 return self.say(exc.text if isinstance(exc, NexusError) else tr("fail"), Qgis.MessageLevel.Warning)
             last = res[-1]
             self.last_layer_id = last["layer"]["id"]
             self.last_urls = last["stream"]["urls"]
             self.url.setText(self.last_urls.get("mvt") or self.last_urls.get("xyz") or "")
             reduced = [x for r in res for x in (r.get("styleReduced") or [])]
-            for x in reduced:
-                QgsMessageLog.logMessage(f"style simplified: {x}", LOG, Qgis.MessageLevel.Info)
             if self.scene.text().strip():
                 for r in res:
                     self.client.bind(r["layer"]["id"], self.scene.text().strip())
