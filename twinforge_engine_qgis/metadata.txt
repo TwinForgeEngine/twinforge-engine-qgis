@@ -1,0 +1,24 @@
+[general]
+name=TwinForge Engine for QGIS
+qgisMinimumVersion=3.34
+qgisMaximumVersion=3.99
+description=Publish QGIS layers to TwinForge Engine and add TwinForge Engine layers to QGIS, using a TwinForge Engine access token.
+about=Connect with a tft_ access token from your TwinForge Engine account (Account, API keys) that has gis:read, and gis:publish if you want to publish. Choose a project, tick vector or raster layers and publish them to the TwinForge Engine PostGIS workspace. Classes, colours, legend, labels and pop-up fields travel with each vector layer; rasters are converted to Cloud Optimized GeoTIFF on your computer before upload. Published layers can then be added in TwinForge Map, in a TwinForge Engine scene and in TwinForge Canvas dashboards. Layers that are already in TwinForge Engine can be added back into QGIS. The token is kept in the QGIS authentication database, never in project files. Interface in English, Thai and Japanese. Requires a TwinForge Engine account (https://twinforgeengine.online).
+version=0.2.1
+author=TwinForge Engine
+email=support@twinforgeengine.online
+homepage=https://twinforgeengine.online/qgis-plugin/
+tracker=https://twinforgeengine.online/contact
+repository=https://twinforgeengine.online/qgis-plugin/
+license=GPL-2.0-or-later
+category=Web
+tags=twinforge,publish,postgis,vector tiles,cog,web,3d,digital twin
+experimental=False
+deprecated=False
+hasProcessingProvider=no
+server=False
+icon=icon.png
+changelog=
+    0.2.1 Network requests go through QGIS (proxy and SSL settings apply). README added.
+    0.2.0 First public release. Personal project is created on first connect. Add TwinForge Engine layers to QGIS. English, Thai and Japanese interface. Open TwinForge Map from the dock.
+    0.1.0 Internal test build.

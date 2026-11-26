@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+dist-plugin/
+*.zip
+tf_live_state.json
+tokens*.json
+tests/data/not_a_cog.tif
+shots/
