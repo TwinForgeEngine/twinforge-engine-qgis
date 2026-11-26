@@ -12,7 +12,7 @@ from typing import Any
 KEY_RE = re.compile(r"^tft_[A-Za-z0-9_-]{40,50}$")
 DEFAULT_BASE = "https://twinforgeengine.online"
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 
 def _qgis_available() -> bool:
