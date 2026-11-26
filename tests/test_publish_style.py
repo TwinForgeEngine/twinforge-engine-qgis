@@ -53,16 +53,17 @@ class Iface:
     def messageBar(self): return _Bar()
 
 
+DOCKS = []
+
+
 def dock_for(base):
     from twinforge_engine_qgis.dock import TwinForgeDock
     d = TwinForgeDock(Iface()); d.client = NexusClient(GOOD, base, timeout=10)
-    d.project.addItem("p", "P1"); d.project.setCurrentIndex(d.project.count() - 1)
+    d.project.addItem("p", "P1"); d.project.setCurrentIndex(d.project.count() - 1); DOCKS.append(d)
     return d
 
 
 def test_road_layer_with_empty_field_publishes_with_its_categories(base):
-    logs = []
-    QgsApplication.messageLog().messageReceived.connect(lambda m, tag, lvl: logs.append((tag, m)))
     lyr = T.layer("line")
     lyr.setRenderer(QgsCategorizedSymbolRenderer("highway", [QgsRendererCategory(v, T.sym_for("line", c), v)
                                                              for v, c in zip(T.ROADS, ["#E67E22", "#8E44AD", "#3498DB", "#95A5A6"])]))
@@ -73,13 +74,17 @@ def test_road_layer_with_empty_field_publishes_with_its_categories(base):
     assert "ref" not in [f["name"] for f in st["popup"]["fields"]]
 
 
-def test_server_refusal_falls_back_to_one_colour_and_logs_why(base):
+def test_server_refusal_falls_back_to_one_colour_and_logs_why(base, monkeypatch):
     logs = []
-    QgsApplication.messageLog().messageReceived.connect(lambda m, tag, lvl: logs.append(m))
+    import twinforge_engine_qgis.dock as D
+
+    class _Log:
+        @staticmethod
+        def logMessage(m, tag="", level=None): logs.append(m)
+    monkeypatch.setattr(D, "QgsMessageLog", _Log)
     SEEN["refuse_next"] = 1; n0 = len(SEEN["styles"])
     lyr = T.layer("line"); lyr.setRenderer(T._rule_renderer("line", [("length($geometry) > 10", "#E67E22")]))
     r = dock_for(base)._publish_one(lyr)
-    for _ in range(20): QgsApplication.processEvents()
     assert r["layer"]["id"] == "L1" and len(SEEN["styles"]) == n0 + 2
     assert SEEN["styles"][-1]["renderer"] == "single" and SEEN["styles"][-1]["single"]["color"] == "#E67E22"
     assert any("test refusal" in m for m in logs) and any("Rule-based" in m for m in logs), logs

@@ -6,8 +6,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from qgis.core import QgsApplication
-APP = QgsApplication.instance() or QgsApplication([], True)
-APP.initQgis()
+APP = QgsApplication.instance()
 from twinforge_engine_qgis.core.client import NexusClient, NexusError, VERSION
 GOOD = "tft_" + "A" * 43
 SEEN = []

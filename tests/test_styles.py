@@ -6,8 +6,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from qgis.core import QgsApplication
-APP = QgsApplication.instance() or QgsApplication([], True)
-APP.initQgis()
+APP = QgsApplication.instance()
 from qgis.core import (Qgs25DRenderer, QgsArrowSymbolLayer, QgsCategorizedSymbolRenderer, QgsCoordinateReferenceSystem,
                        QgsCoordinateTransformContext, QgsFeature, QgsFillSymbol, QgsGeometry, QgsGeometryGeneratorSymbolLayer,
                        QgsGradientFillSymbolLayer, QgsGraduatedSymbolRenderer, QgsHeatmapRenderer, QgsInvertedPolygonRenderer,
@@ -125,13 +124,15 @@ def test_graduated(kind):
 
 
 def _rule_renderer(kind, exprs):
-    root = QgsRuleBasedRenderer.Rule(None)
-    for i, (e, c) in enumerate(exprs):
-        r = QgsRuleBasedRenderer.Rule(sym_for(kind, c), 0, 0, e or "", f"rule {i}")
+    """Rule tree built by QGIS itself (as in a real project): from a categorized renderer, then filters set."""
+    cats = [QgsRendererCategory(f"v{i}", sym_for(kind, c), f"rule {i}") for i, (e, c) in enumerate(exprs)]
+    r = QgsRuleBasedRenderer.convertFromRenderer(QgsCategorizedSymbolRenderer("highway", cats))
+    for rule, (e, c) in zip(r.rootRule().children(), exprs):
         if e is None:
-            r.setIsElse(True)
-        root.appendChild(r)
-    return QgsRuleBasedRenderer(root)
+            rule.setFilterExpression(""); rule.setIsElse(True)
+        else:
+            rule.setFilterExpression(e)
+    return r
 
 
 @pytest.mark.parametrize("kind", ["line", "point", "poly"])

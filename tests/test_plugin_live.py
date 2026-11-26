@@ -25,8 +25,7 @@ from qgis.core import (QgsApplication, QgsCategorizedSymbolRenderer, QgsClassifi
                        QgsGraduatedSymbolRenderer, QgsProject, QgsRasterLayer, QgsRendererCategory, QgsRuleBasedRenderer,
                        QgsVectorLayer)
 
-APP = QgsApplication([], True)
-APP.initQgis()
+APP = QgsApplication.instance()
 from qgis.PyQt.QtCore import Qt  # noqa: E402
 from twinforge_engine_qgis import i18n  # noqa: E402
 from twinforge_engine_qgis.core.client import NexusClient, VERSION  # noqa: E402
